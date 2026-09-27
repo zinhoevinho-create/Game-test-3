@@ -142,7 +142,9 @@ void reset_game(Player *p) {
 
 void draw_frame(Player *p) {
     static char screen[SCR_ROWS][SCR_COLS + 1];
-    int r, c, i;
+    int r, c, i, hi;
+    int gems_collected = 0;
+    char hearts[16];
 
     for (r = 0; r < SCR_ROWS; r++) {
         for (c = 0; c < SCR_COLS; c++) screen[r][c] = ' ';
@@ -179,16 +181,29 @@ void draw_frame(Player *p) {
     }
 
     /* jogador */
-    int pr = (int)(p->y + 0.5f);
-    int pc = (int)(p->x + 0.5f);
-    if (pr >= 0 && pr < SCR_ROWS && pc >= 0 && pc < SCR_COLS) {
-        screen[pr][pc] = p->alive ? (p->boosting ? '>' : '@') : 'X';
+    {
+        int pr = (int)(p->y + 0.5f);
+        int pc = (int)(p->x + 0.5f);
+        if (pr >= 0 && pr < SCR_ROWS && pc >= 0 && pc < SCR_COLS) {
+            screen[pr][pc] = p->alive ? (p->boosting ? '>' : '@') : 'X';
+        }
     }
+
+    /* quantas gemas ja foram coletadas, pra mostrar no placar */
+    for (i = 0; i < MAX_GEMS; i++) {
+        if (gems[i].collected) gems_collected++;
+    }
+
+    /* corazoes de vida, um espaco por vida perdida */
+    for (hi = 0; hi < START_LIVES; hi++) {
+        hearts[hi] = (hi < p->lives) ? '<' : '.';
+    }
+    hearts[START_LIVES] = '\0';
 
     pspdebugScreenSetXY(0, 0);
     pspdebugScreenPrintf("TURBO DASH - PSP Edition                                          ");
-    pspdebugScreenPrintf("Vidas: %d   Gemas: %d/%d   Pontos: %d                              ",
-                          p->lives, p->score, MAX_GEMS, p->score);
+    pspdebugScreenPrintf("Vidas: %s   Gemas: %d/%d   Pontos: %d                              ",
+                          hearts, gems_collected, MAX_GEMS, p->score);
     pspdebugScreenPrintf("D-Pad: mover  X: pular  >: pad de boost  W: mola  START: reiniciar ");
 
     for (r = 0; r < SCR_ROWS; r++) {
@@ -211,7 +226,6 @@ int main(int argc, char *argv[]) {
     SceCtrlData pad;
     Player player;
     int i;
-    int prev_y_below_enemy[MAX_ENEMIES];
 
     setup_callbacks();
     pspdebugScreenInit();
@@ -228,9 +242,16 @@ int main(int argc, char *argv[]) {
         }
 
         if (player.lives > 0 && !player.won) {
-            int col = (int)(player.x + 0.5f);
-            int on_boost = (col >= BOOST_START && col <= BOOST_END);
-            float speed = on_boost ? BOOST_SPEED : BASE_SPEED;
+            int col;
+            int on_boost;
+            float speed;
+            int is_pit;
+            int on_spring;
+            float ground_level;
+
+            col = (int)(player.x + 0.5f);
+            on_boost = (col >= BOOST_START && col <= BOOST_END);
+            speed = on_boost ? BOOST_SPEED : BASE_SPEED;
             player.boosting = on_boost;
 
             /* movimento horizontal */
@@ -254,9 +275,9 @@ int main(int argc, char *argv[]) {
             player.y += player.vy;
 
             col = (int)(player.x + 0.5f);
-            int is_pit = col_is_pit(col);
-            int on_spring = (col == SPRING_COL);
-            float ground_level = (float)GROUND_ROW - 1.0f;
+            is_pit = col_is_pit(col);
+            on_spring = (col == SPRING_COL);
+            ground_level = (float)GROUND_ROW - 1.0f;
 
             if (!is_pit && player.y >= ground_level) {
                 player.y = ground_level;
@@ -288,14 +309,16 @@ int main(int argc, char *argv[]) {
 
             /* inimigos: patrulham e podem ser pisados ou machucar */
             for (i = 0; i < MAX_ENEMIES; i++) {
+                int ec, player_row;
+
                 if (!enemies[i].alive) continue;
 
                 enemies[i].x += 0.2f * enemies[i].dir;
                 if (enemies[i].x >= enemies[i].max_x) enemies[i].dir = -1;
                 if (enemies[i].x <= enemies[i].min_x) enemies[i].dir = 1;
 
-                int ec = (int)(enemies[i].x + 0.5f);
-                int player_row = (int)(player.y + 0.5f);
+                ec = (int)(enemies[i].x + 0.5f);
+                player_row = (int)(player.y + 0.5f);
 
                 if (ec == col) {
                     if (player_row == GROUND_ROW - 2 && player.vy > 0) {
